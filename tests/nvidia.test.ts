@@ -4,6 +4,7 @@ import { POST } from '../src/app/api/nvidia/route';
 import { analyze } from '../src/lib/ai/openai';
 import { createDiagnosticClient } from '../src/lib/mcp/client';
 import { DiagnosticSession } from '../src/lib/diagnostics/session';
+import type { AnalysisStage } from '../src/lib/ai/presentation';
 import { DemoDevice } from '../src/lib/diagnostics/demo';
 const model='nvidia/nemotron-3-ultra-550b-a55b';
 const body={model,messages:[{role:'user',content:'test'}],tools:[],tool_choice:'required'};
@@ -19,11 +20,11 @@ test('NVIDIA returns safe useful status error without echoing credentials or ups
   try { const response=await POST(request('https://app.example'));assert.equal(response.status,401);assert.doesNotMatch(JSON.stringify(await response.json()),/nvapi-dummy/); }finally{globalThis.fetch=original;}
 });
 test('NVIDIA adapter calls MCP simulated DTC tool before answering',async()=>{
-  const embedded=await createDiagnosticClient(new DiagnosticSession(new DemoDevice(),'simulated','DEMO'));const original=globalThis.fetch;let count=0;
+  const embedded=await createDiagnosticClient(new DiagnosticSession(new DemoDevice(),'simulated','DEMO'));const original=globalThis.fetch;let count=0;const stages: AnalysisStage[]=[];
   globalThis.fetch=async(url,opts)=>{count++;assert.equal(url,'/api/nvidia');const payload=JSON.parse(String(opts?.body));assert.equal(payload.model,model);
     if(count===1){assert.equal(payload.tool_choice,'required');return Response.json({choices:[{message:{role:'assistant',content:null,tool_calls:[{id:'call-1',type:'function',function:{name:'get_trouble_codes',arguments:'{}'}}]}}]});}
     assert.match(JSON.stringify(payload.messages),/simulated/);assert.match(JSON.stringify(payload.messages),/P0133/);return Response.json({choices:[{message:{role:'assistant',content:'این داده نمایشی است.'}}]});};
-  try{assert.equal(await analyze(embedded.client,'nvapi-dummy',model,'تحلیل کن','nvidia'),'این داده نمایشی است.');assert.equal(count,2);}finally{globalThis.fetch=original;await embedded.close();}
+  try{assert.equal(await analyze(embedded.client,'nvapi-dummy',model,'تحلیل کن','nvidia', stage=>stages.push(stage)),'این داده نمایشی است.');assert.equal(count,2);assert.deepEqual(stages,['preparing','requesting','reading','summarizing']);}finally{globalThis.fetch=original;await embedded.close();}
 });
 test('NVIDIA cannot provide a non-tool-grounded answer',async()=>{
   const embedded=await createDiagnosticClient(new DiagnosticSession(new DemoDevice(),'simulated','DEMO'));const original=globalThis.fetch;globalThis.fetch=async()=>Response.json({choices:[{message:{role:'assistant',content:'fabricated'}}]});

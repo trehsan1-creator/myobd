@@ -1,16 +1,19 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { toolNames } from '../diagnostics/tools';
+import { reportInstruction, type OnAnalysisStage } from './presentation';
 
 type Message = { role: string; content: string | null; tool_calls?: { id: string; type: string; function: { name: string; arguments: string } }[]; tool_call_id?: string };
-export async function analyze(client: Client, key: string, model: string, question: string, provider: 'openai' | 'nvidia' = 'openai'): Promise<string> {
+export async function analyze(client: Client, key: string, model: string, question: string, provider: 'openai' | 'nvidia' = 'openai', onStage?: OnAnalysisStage): Promise<string> {
+  onStage?.('preparing');
   const available = await client.listTools();
   const tools = available.tools.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
   const messages: Message[] = [
-    { role: 'system', content: 'You are a cautious Persian automotive assistant. You MUST call diagnostic tools before answering. Never invent readings or successful calls. Identify simulated data clearly, explain possible causes as hypotheses, never offer a definitive component diagnosis, and recommend safe checks. No dangerous or write commands.' },
+    { role: 'system', content: 'You are a cautious Persian automotive assistant. You MUST call diagnostic tools before answering. Never invent readings or successful calls. Identify simulated data clearly, explain possible causes as hypotheses, never offer a definitive component diagnosis, and recommend safe checks. No dangerous or write commands. ' + reportInstruction },
     { role: 'user', content: question },
   ];
   let usedTool = false;
   for (let turn = 0; turn < 5; turn++) {
+    onStage?.(usedTool ? 'summarizing' : 'requesting');
     const response = await fetch(provider === 'nvidia' ? '/api/nvidia' : '/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` }, body: JSON.stringify({ model, messages, tools, tool_choice: usedTool ? 'auto' : 'required' }) });
     let json: any;
     try { json = await response.json(); } catch { throw new Error(`پاسخ سرور قابل خواندن نیست (HTTP ${response.status}).`); }
@@ -22,6 +25,7 @@ export async function analyze(client: Client, key: string, model: string, questi
       return message.content;
     }
     if (message.tool_calls.length > 8) throw new Error('Too many tool calls');
+    onStage?.('reading');
     messages.push(message);
     for (const call of message.tool_calls) {
       let result: unknown;

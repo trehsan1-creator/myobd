@@ -1,11 +1,13 @@
 import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { toolNames } from '../diagnostics/tools';
+import { reportInstruction, type OnAnalysisStage } from './presentation';
 
 type Part = { text?: string; thought?: boolean; thoughtSignature?: string; functionCall?: { id?: string; name: string; args?: Record<string, unknown> } };
 type Content = { role: 'user' | 'model'; parts: unknown[] };
 
 /** Gemini GenerateContent REST function-calling, with a browser-local MCP client. */
-export async function analyzeGemini(client: Client, key: string, model: string, question: string): Promise<string> {
+export async function analyzeGemini(client: Client, key: string, model: string, question: string, onStage?: OnAnalysisStage): Promise<string> {
+  onStage?.('preparing');
   const available = await client.listTools();
   const declarations = available.tools.map(t => {
     // The diagnostic surface has only these small, fixed input shapes. Validation
@@ -20,10 +22,11 @@ export async function analyzeGemini(client: Client, key: string, model: string, 
   const contents: Content[] = [{ role: 'user', parts: [{ text: question }] }];
   let usedTool = false;
   for (let turn = 0; turn < 5; turn++) {
+    onStage?.(usedTool ? 'summarizing' : 'requesting');
     const response = await fetch('/api/gemini', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
       body: JSON.stringify({ model, contents, tools: [{ functionDeclarations: declarations }],
-        systemInstruction: { parts: [{ text: 'You are a careful Persian automotive diagnostic assistant. Call diagnostic tools before answering. Never invent data or tool success. Clearly label simulated data. Describe possible causes as hypotheses, not definitive diagnoses. Never request unsafe or write operations. If tools fail, state that data is unavailable.' }] },
+        systemInstruction: { parts: [{ text: 'You are a careful Persian automotive diagnostic assistant. Call diagnostic tools before answering. Never invent data or tool success. Clearly label simulated data. Describe possible causes as hypotheses, not definitive diagnoses. Never request unsafe or write operations. If tools fail, state that data is unavailable. ' + reportInstruction }] },
         toolConfig: { functionCallingConfig: { mode: usedTool ? 'AUTO' : 'ANY' } },
       }),
     });
@@ -42,6 +45,7 @@ export async function analyzeGemini(client: Client, key: string, model: string, 
     if (calls.length > 8) throw new Error('تعداد درخواست ابزار بیش از حد مجاز است.');
     // Preserve all model parts and thought signatures exactly; Gemini requires
     // these on subsequent turns, particularly with thinking models.
+    onStage?.('reading');
     contents.push(content);
     const results: unknown[] = [];
     for (const part of calls) {
