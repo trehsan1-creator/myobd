@@ -4,7 +4,7 @@ A read-only, browser-local ELM327 diagnostic engine with a separate labelled sim
 
 ## Setup and deployment
 
-Node.js 20.9+ (22 recommended). Run `npm ci`, `npm test`, `npm run build`, then `npm run dev`. Open `http://localhost:3000` on the same machine. For hardware on another device use HTTPS; browser hardware APIs need a secure context and a user gesture. Deploy to Vercel with its Next.js defaults; no environment variables, database, or local bridge are required. The Vercel Edge route only proxies user-initiated Gemini/OpenAI calls; the adapter is accessed exclusively in the browser. `npm run start` runs the production build. Deploy has not been verified in this environment.
+Node.js 20.9+ (22 recommended). Run `npm ci`, `npm test`, `npm run build`, then `npm run dev`. Open `http://localhost:3000` on the same machine. For hardware on another device use HTTPS; browser hardware APIs need a secure context and a user gesture. Deploy to Vercel with its Next.js defaults; no environment variables, database, or local bridge are required. The Vercel API routes only proxy user-initiated Gemini/OpenAI calls; the adapter is accessed exclusively in the browser. `npm run start` runs the production build. Deploy has not been verified in this environment.
 
 ## Usage
 
@@ -24,7 +24,7 @@ In assistant settings, select Google Gemini (the default) and enter a Google AI 
 
 - No clear-DTC, ECU programming, actuator tests, arbitrary raw LLM commands, proprietary module scans, or write operations. Do not use while driving.
 - PID/DTC parsing is deliberately conservative: ambiguous multi-ECU responses, many multiline/ISO-TP VIN formats, and some legacy adapter formats may be unavailable. ISO-TP flow-control injection is not implemented. No manufacturer identification database or DTC explanation database is included. Empty/unavailable readings are not treated as zero.
-- Automatic continuous polling, offline PWA/Serwist, native iOS wrapper, encrypted persistent credentials, streaming assistant output, external MCP interoperability and provider options beyond Gemini and OpenAI remain unimplemented. No claim of offline-first operation or production readiness is made. The Edge runtime is deprecated by the installed Next.js version and emits a build warning.
+- Automatic continuous polling, offline PWA/Serwist, native iOS wrapper, encrypted persistent credentials, streaming assistant output, external MCP interoperability and provider options beyond Gemini and OpenAI remain unimplemented. No claim of offline-first operation or production readiness is made. The OpenAI Edge runtime is deprecated by the installed Next.js version and emits a build warning; the Gemini proxy uses Node.js.
 - Hardware and AI results can be incorrect or stale. AI-generated possible causes are hypotheses, not definitive diagnoses.
 
 ## Progress

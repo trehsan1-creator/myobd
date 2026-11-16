@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 const requestSchema = z.object({
   model: z.string().regex(/^gemini-[a-zA-Z0-9._-]{1,72}$/),
   contents: z.array(z.unknown()).min(1).max(50),
@@ -27,9 +27,15 @@ export async function POST(req: Request) {
   const { model, ...body } = input;
   try {
     const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST', headers: { 'x-goog-api-key': auth.slice(7), 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store',
+      method: 'POST', headers: { 'x-goog-api-key': auth.slice(7), 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(45000),
     });
     if (!upstream.ok) return Response.json({ error: `درخواست Gemini ناموفق بود (${upstream.status}). کلید، مدل، سهمیه و دسترسی منطقه‌ای را بررسی کنید.` }, { status: upstream.status });
-    return new Response(upstream.body, { headers: { 'content-type': 'application/json', 'cache-control': 'no-store' } });
+    // Materialize and validate before responding: forwarding an upstream stream can
+    // fail after headers have been sent, leaving the browser with invalid JSON.
+    const responseText = await upstream.text();
+    let result: unknown;
+    try { result = JSON.parse(responseText); }
+    catch { return Response.json({ error: 'Gemini پاسخ معتبر JSON نداد. لطفاً دوباره تلاش کنید.' }, { status: 502 }); }
+    return Response.json(result, { headers: { 'cache-control': 'no-store' } });
   } catch { return Response.json({ error: 'ارتباط با Gemini برقرار نشد.' }, { status: 502 }); }
 }

@@ -50,3 +50,21 @@ test('Gemini proxy restricts origin and model and sends the key only as a header
     assert.equal((await POST(req('https://app.example', body))).status, 200); assert.equal(called, true);
   } finally { globalThis.fetch = original; }
 });
+
+test('proxy handles invalid upstream JSON without leaking response content', async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response('sensitive upstream body', { status: 200 });
+  const body = { model: 'gemini-2.5-flash', contents: [{ role: 'user', parts: [{text:'test'}] }], tools: [], systemInstruction: {parts:[{text:'test'}]}, toolConfig: {functionCallingConfig:{mode:'ANY'}} };
+  try {
+    const response = await POST(new Request('https://app.example/api/gemini', {method:'POST', headers: {host:'app.example',origin:'https://app.example',authorization:'Bearer dummy','content-type':'application/json'}, body:JSON.stringify(body)}));
+    assert.equal(response.status, 502); assert.doesNotMatch(JSON.stringify(await response.json()), /sensitive/);
+  } finally { globalThis.fetch=original; }
+});
+
+test('client reports HTTP status when the deployment returns non-JSON', async () => {
+  const embedded = await createDiagnosticClient(new DiagnosticSession(new DemoDevice(), 'simulated', 'DEMO'));
+  const original = globalThis.fetch;
+  globalThis.fetch = async () => new Response('server failed', { status: 500 });
+  try { await assert.rejects(analyzeGemini(embedded.client, 'dummy', 'gemini-2.5-flash', 'test'), /HTTP 500/); }
+  finally { globalThis.fetch=original; await embedded.close(); }
+});

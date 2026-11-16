@@ -28,7 +28,7 @@ export async function analyzeGemini(client: Client, key: string, model: string, 
       }),
     });
     let json: any;
-    try { json = await response.json(); } catch { throw new Error('پاسخ Gemini قابل خواندن نیست.'); }
+    try { json = await response.json(); } catch { throw new Error(`سرور پاسخ قابل خواندن نداد (HTTP ${response.status}). صفحه را تازه‌سازی و دوباره تلاش کنید؛ اگر ادامه داشت، کد خطا را ارسال کنید.`); }
     if (!response.ok) throw new Error(typeof json.error === 'string' ? json.error : 'درخواست Gemini ناموفق بود.');
     const content = json?.candidates?.[0]?.content;
     if (!content || content.role !== 'model' || !Array.isArray(content.parts)) throw new Error('Gemini پاسخی قابل استفاده برنگرداند؛ تنظیمات ایمنی و مدل را بررسی کنید.');
