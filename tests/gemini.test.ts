@@ -68,3 +68,19 @@ test('client reports HTTP status when the deployment returns non-JSON', async ()
   try { await assert.rejects(analyzeGemini(embedded.client, 'dummy', 'gemini-2.5-flash', 'test'), /HTTP 500/); }
   finally { globalThis.fetch=original; await embedded.close(); }
 });
+
+test('proxy retries an explicit 503 once then returns the provider response', async () => {
+  const original=globalThis.fetch; let count=0;
+  globalThis.fetch=async()=>{ count++; return count===1 ? new Response('temporarily unavailable', {status:503}) : Response.json({candidates:[]}); };
+  const body={model:'gemini-3.8-flash',contents:[{role:'user',parts:[{text:'test'}]}],tools:[],systemInstruction:{parts:[{text:'test'}]},toolConfig:{functionCallingConfig:{mode:'ANY'}}};
+  try { const response=await POST(new Request('https://app.example/api/gemini',{method:'POST',headers:{host:'app.example',origin:'https://app.example',authorization:'Bearer dummy','content-type':'application/json'},body:JSON.stringify(body)})); assert.equal(response.status,200); assert.equal(count,2); }
+  finally { globalThis.fetch=original; }
+});
+
+test('proxy does not retry quota errors', async () => {
+  const original=globalThis.fetch; let count=0;
+  globalThis.fetch=async()=>{ count++; return new Response('quota', {status:429}); };
+  const body={model:'gemini-3.8-flash',contents:[{role:'user',parts:[{text:'test'}]}],tools:[],systemInstruction:{parts:[{text:'test'}]},toolConfig:{functionCallingConfig:{mode:'ANY'}}};
+  try { const response=await POST(new Request('https://app.example/api/gemini',{method:'POST',headers:{host:'app.example',origin:'https://app.example',authorization:'Bearer dummy','content-type':'application/json'},body:JSON.stringify(body)})); assert.equal(response.status,429); assert.equal(count,1); }
+  finally { globalThis.fetch=original; }
+});

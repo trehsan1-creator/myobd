@@ -26,13 +26,26 @@ export async function POST(req: Request) {
   } catch { return Response.json({ error: 'درخواست نامعتبر است.' }, { status: 400 }); }
   const { model, ...body } = input;
   try {
-    const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const requestGoogle = () => fetch(url, {
       method: 'POST', headers: { 'x-goog-api-key': auth.slice(7), 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(45000),
     });
+    let upstream = await requestGoogle();
+    // Only retry an explicit 503 once. No diagnostic tool is re-executed, and
+    // quota/auth errors and ambiguous network failures are never retried.
+    if (upstream.status === 503) {
+      await upstream.body?.cancel();
+      await new Promise(resolve => setTimeout(resolve, 1200));
+      upstream = await requestGoogle();
+    }
     if (!upstream.ok) {
       const message = upstream.status === 404
         ? `مدل ${model} پیدا نشد یا برای این کلید در دسترس نیست (404). مدل دیگری را در تنظیمات انتخاب کنید.`
-        : `درخواست Gemini ناموفق بود (${upstream.status}). کلید، مدل، سهمیه و دسترسی منطقه‌ای را بررسی کنید.`;
+        : upstream.status === 503
+        ? 'سرویس Gemini فعلاً در دسترس نیست یا شلوغ است (503). یک بار تلاش مجدد انجام شد؛ چند دقیقه دیگر دوباره امتحان کنید یا مدل دیگری را در تنظیمات انتخاب کنید.'
+        : upstream.status === 429
+        ? 'محدودیت درخواست یا سهمیه Gemini فعال شده است (429). سهمیه حساب را بررسی کنید و بعداً دوباره امتحان کنید.'
+        : `درخواست Gemini ناموفق بود (${upstream.status}). کلید، مدل و دسترسی حساب را بررسی کنید.`;
       return Response.json({ error: message }, { status: upstream.status });
     }
     // Materialize and validate before responding: forwarding an upstream stream can
