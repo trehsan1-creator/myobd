@@ -29,7 +29,12 @@ export async function POST(req: Request) {
     const upstream = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
       method: 'POST', headers: { 'x-goog-api-key': auth.slice(7), 'content-type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: AbortSignal.timeout(45000),
     });
-    if (!upstream.ok) return Response.json({ error: `درخواست Gemini ناموفق بود (${upstream.status}). کلید، مدل، سهمیه و دسترسی منطقه‌ای را بررسی کنید.` }, { status: upstream.status });
+    if (!upstream.ok) {
+      const message = upstream.status === 404
+        ? `مدل ${model} پیدا نشد یا برای این کلید در دسترس نیست (404). مدل دیگری را در تنظیمات انتخاب کنید.`
+        : `درخواست Gemini ناموفق بود (${upstream.status}). کلید، مدل، سهمیه و دسترسی منطقه‌ای را بررسی کنید.`;
+      return Response.json({ error: message }, { status: upstream.status });
+    }
     // Materialize and validate before responding: forwarding an upstream stream can
     // fail after headers have been sent, leaving the browser with invalid JSON.
     const responseText = await upstream.text();
